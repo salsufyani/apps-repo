@@ -10,6 +10,8 @@ on:
 jobs:
   app-lint:
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
     steps:
       - uses: actions/checkout@v2
 
@@ -75,8 +77,15 @@ jobs:
           done
           exit ${lint_retcode}
 
+      - name: Upload Check Result
+        if: ${{ !env.ACT && (success() || failure()) }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: Check Results
+          path: /tmp/lint-report.md
+
       - name: Report check result
-        uses: actions/github-script@v5
+        uses: actions/github-script@v6
         if: ${{ !env.ACT && (success() || failure()) }}
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
@@ -89,6 +98,6 @@ jobs:
                body: fs.readFileSync('/tmp/lint-report.md', 'utf-8')
              })
 
-      - name: Print check result (local test)
+      - name: Print Check Result (Local)
         if: ${{ env.ACT && (success() || failure()) }}
         run: cat /tmp/lint-report.md
