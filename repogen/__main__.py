@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import argparse
-from os import path
-from repogen import apppage, apidata
-from repogen.common import list_packages
+from pathlib import Path
+
+from repogen import apppage, apidata, pkg_info
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-i', '--input-dir', required=True)
@@ -17,9 +17,9 @@ parser.set_defaults(gen_api=True, gen_details=True, gen_list=True)
 
 args = parser.parse_args()
 
-packages = list_packages(args.input_dir)
+packages = pkg_info.list_packages(Path(args.input_dir))
 
 if args.gen_api:
-    apidata.generate(packages, path.join(args.output_dir, 'api'))
+    apidata.generate(packages, Path(args.output_dir, 'api'))
 
-apppage.generate(packages, path.join(args.output_dir, 'apps'), gen_details=args.gen_details, gen_list=args.gen_list)
+apppage.generate(packages, Path(args.output_dir, 'apps'), gen_details=args.gen_details, gen_list=args.gen_list)

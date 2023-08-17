@@ -1,6 +1,8 @@
+from pathlib import Path
+
 import requests
 
-from repogen.common import parse_package_info
+from repogen import pkg_info
 
 if __name__ == '__main__':
     import argparse
@@ -10,7 +12,7 @@ if __name__ == '__main__':
     parser.add_argument('-o', '--output', required=True)
     args = parser.parse_args()
 
-    pkginfo = parse_package_info(args.info)
+    pkginfo = pkg_info.from_package_info_file(Path(args.info))
     with requests.get(pkginfo['manifest']['ipkUrl'], allow_redirects=True) as resp:
         with open(args.output, 'wb') as f:
             f.write(resp.content)

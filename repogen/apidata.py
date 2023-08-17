@@ -1,44 +1,53 @@
 # -*- coding: utf-8 -*-
 import json
 import math
-from os import makedirs
-from os.path import exists, join
+import urllib.parse
+from pathlib import Path
+from typing import List
 
 import more_itertools
-
-from repogen.common import list_packages
 from markdown import Markdown
+
+from repogen import pkg_info
+from repogen.common import ITEMS_PER_PAGE, ensure_open
+from repogen.pkg_info import PackageInfo
 
 MANIFEST_KEYS = ('id', 'title', 'iconUri', 'manifestUrl', 'manifest', 'manifestUrlBeta', 'manifestBeta', 'pool')
 
 
-def generate(packages, outdir):
+def fix_manifest_url(item: PackageInfo, app_dir: Path):
+    if urllib.parse.urlparse(item['manifestUrl']).scheme != 'file':
+        return
+    manifest = item["manifest"]
+    manifest_path = app_dir.joinpath('manifests', f'{manifest["version"]}.json')
+
+    with ensure_open(manifest_path, mode='w') as mf:
+        json.dump(manifest, mf)
+    manifest_url = manifest_path.as_posix()
+    item['manifestUrl'] = manifest_url[manifest_url.find('/api/apps'):]
+
+
+def generate(packages: List[PackageInfo], outdir: Path):
     markdown = Markdown()
 
-    if not exists(outdir):
-        makedirs(outdir)
-    appsdir = join(outdir, 'apps')
-    if not exists(appsdir):
-        makedirs(appsdir)
+    appsdir: Path = outdir.joinpath('apps')
 
-    def package_item(item, in_apps_dir):
-        package = {k: item[k] for k in MANIFEST_KEYS if k in item}
-        package['shortDescription'] = item['manifest'].get(
+    def package_item(p_info: PackageInfo, in_apps_dir: bool):
+        package = {k: p_info[k] for k in MANIFEST_KEYS if k in p_info}
+        package['shortDescription'] = p_info['manifest'].get(
             'appDescription', None)
         if in_apps_dir:
-            package['fullDescriptionUrl'] = f'{item["id"]}-full_description.html'
+            package['fullDescriptionUrl'] = f'{p_info["id"]}/full_description.html'
         else:
-            package['fullDescriptionUrl'] = f'apps/{item["id"]}-full_description.html'
+            package['fullDescriptionUrl'] = f'apps/{p_info["id"]}/full_description.html'
         return package
 
-    items_per_page = 30
     packages_length = len(packages)
-    max_page = math.ceil(packages_length / items_per_page)
-    for index, items in enumerate(more_itertools.chunked(packages, items_per_page)):
-        page = index + 1
-        json_file = join(appsdir, '%d.json' %
-                         page) if page > 1 else join(outdir, 'apps.json')
-        with open(json_file, 'w', encoding='utf-8') as f:
+    max_page = math.ceil(packages_length / ITEMS_PER_PAGE)
+
+    def save_page(page: int, items: [PackageInfo]):
+        json_file = appsdir.joinpath('%d.json' % page) if page > 1 else outdir.joinpath('apps.json')
+        with ensure_open(json_file, 'w', encoding='utf-8') as pf:
             json.dump({
                 'paging': {
                     'page': page,
@@ -47,14 +56,21 @@ def generate(packages, outdir):
                     'itemsTotal': packages_length,
                 },
                 'packages': list(map(lambda x: package_item(x, page > 1), items))
-            }, f, indent=2)
-        for item in items:
-            app_info = join(appsdir, f'{item["id"]}.json')
-            with open(app_info, 'w', encoding='utf-8') as f:
+            }, pf, indent=2)
+
+    chunks = more_itertools.chunked(packages, ITEMS_PER_PAGE) if packages else [[]]
+    for index, chunk in enumerate(chunks):
+        for item in chunk:
+            app_dir = appsdir.joinpath(item['id'])
+            releases_dir = app_dir.joinpath('releases')
+            fix_manifest_url(item, app_dir)
+            app_info = releases_dir.joinpath('latest.json')
+            with ensure_open(app_info, 'w', encoding='utf-8') as f:
                 json.dump(package_item(item, True), f)
-            desc_html = join(appsdir, f'{item["id"]}-full_description.html')
-            with open(desc_html, 'w', encoding='utf-8') as f:
+            desc_html = app_dir.joinpath('full_description.html')
+            with ensure_open(desc_html, 'w', encoding='utf-8') as f:
                 f.write(markdown.convert(item['description']))
+        save_page(index + 1, chunk)
     print('Generated json data for %d packages.' % len(packages))
 
 
@@ -66,4 +82,4 @@ if __name__ == '__main__':
     parser.add_argument('-o', '--output-dir', required=True)
     args = parser.parse_args()
 
-    generate(list_packages(args.input_dir), args.output_dir)
+    generate(pkg_info.list_packages(Path(args.input_dir)), Path(args.output_dir))

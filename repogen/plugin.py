@@ -1,15 +1,15 @@
 import logging
 import os
+from pathlib import Path
 
 from markdown import Markdown
 from more_itertools import chunked
 from pelican import signals, Readers, PagesGenerator, StaticGenerator
-from pelican.contents import Page, Static
+from pelican.contents import Page
 from pelican.readers import BaseReader
 from pelican.themes.webosbrew import pagination_data
 
-from repogen import funding, apidata
-from repogen.common import parse_package_info
+from repogen import funding, apidata, pkg_info
 
 log = logging.getLogger(__name__)
 
@@ -23,8 +23,8 @@ class PackageInfoReader(BaseReader):
         super().__init__(*args, **kwargs)
         self._md = Markdown(**self.settings['MARKDOWN'])
 
-    def read(self, filename):
-        info = parse_package_info(filename, offline='CI' not in os.environ)
+    def read(self, filename: str):
+        info = pkg_info.from_package_info_file(Path(filename), offline='CI' not in os.environ)
         metadata = {
             'title': info['title'],
             'override_save_as': f'apps/{info["id"]}.html',
@@ -75,8 +75,8 @@ def add_app_api_data(generator: StaticGenerator):
     def pool_list(pool: str):
         return list(sorted(filter(lambda pkg: pkg['pool'] == pool, packages), key=lambda pkg: pkg['title'].lower()))
 
-    apidata.generate(pool_list('main'), os.path.join(generator.settings['OUTPUT_PATH'], 'api'))
-    apidata.generate(pool_list('non-free'), os.path.join(generator.settings['OUTPUT_PATH'], 'api', 'non-free'))
+    apidata.generate(pool_list('main'), Path(generator.settings['OUTPUT_PATH'], 'api'))
+    apidata.generate(pool_list('non-free'), Path(generator.settings['OUTPUT_PATH'], 'api', 'non-free'))
 
 
 def register():
